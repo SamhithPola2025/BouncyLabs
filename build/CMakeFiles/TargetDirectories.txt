@@ -1,0 +1,3 @@
+/Users/samhithpola/Developer/GitHub/BouncyLabs/build/CMakeFiles/BouncyLabs.dir
+/Users/samhithpola/Developer/GitHub/BouncyLabs/build/CMakeFiles/edit_cache.dir
+/Users/samhithpola/Developer/GitHub/BouncyLabs/build/CMakeFiles/rebuild_cache.dir
