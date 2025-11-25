@@ -25,7 +25,6 @@ void create_particle(
     float damping = 0.99f
 );
 
-// Global variables
 const float DELTATIME = 0.016f;
 ParticleSystem particleSystem;
 
@@ -43,7 +42,7 @@ int main() {
     ImGuiIO& io = ImGui::GetIO();
     ImGui::StyleColorsDark();
 
-    std::cout << glGetString(GL_VERSION) << std::endl;  // works after GL context
+    std::cout << glGetString(GL_VERSION) << std::endl;
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 120");
@@ -65,7 +64,6 @@ int main() {
         ImGui::ColorEdit4("Background Color", bgColor); 
         ImGui::End();
 
-        // Particle controls
         static float x = 200.0f, y = 200.0f;
         static float radius = 10.0f;
         static float vx = 0.0f, vy = 0.0f;
@@ -101,7 +99,6 @@ int main() {
             Square square;
             square.sideLength = squareSideLength;
 
-            // Initialize the square's points
             square.point1 = {squareX, squareY, 5.0f, squareVX, squareVY, 0.0f, 0.0f};
             square.point2 = {squareX + squareSideLength, squareY, 5.0f, squareVX, squareVY, 0.0f, 0.0f};
             square.point3 = {squareX + squareSideLength, squareY + squareSideLength, 5.0f, squareVX, squareVY, 0.0f, 0.0f};
@@ -111,7 +108,6 @@ int main() {
         }
         ImGui::End();
 
-        // Update the particle system
         particleSystem.update(DELTATIME);
 
         // Render particles
@@ -135,7 +131,6 @@ int main() {
             }
         }
 
-        // Render squares
         for (const auto& square : particleSystem.squares) {
             auto* drawList = ImGui::GetForegroundDrawList();
 
@@ -156,7 +151,37 @@ int main() {
                               IM_COL32(255, 255, 255, 255), 2.0f);
         }
 
-        // Render ImGui
+        for (auto& square : particleSystem.squares) {
+            for (auto* point : {&square.point1, &square.point2, &square.point3, &square.point4}) {
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float dx = mousePos.x - point->x;
+                float dy = mousePos.y - point->y;
+                float distance = std::sqrt(dx * dx + dy * dy);
+
+                if (distance < point->radius + 5.0f) {
+                    ImGui::GetForegroundDrawList()->AddCircle(
+                        ImVec2(point->x, point->y), point->radius + 3.0f, IM_COL32(0, 255, 0, 255), 12, 2.0f);
+        
+                    if (ImGui::IsMouseDown(0)) {
+                        if (!point->dragged) {
+                            point->dragged = true;
+                            point->vx = 0.0f;
+                            point->vy = 0.0f;
+                            point->ax = 0.0f;
+                            point->ay = 0.0f;
+                            point->offsetX = mousePos.x - point->x;
+                            point->offsetY = mousePos.y - point->y;
+                        }
+        
+                        point->x = mousePos.x - point->offsetX;
+                        point->y = mousePos.y - point->offsetY;
+                    } else {
+                        point->dragged = false;
+                    }
+                }
+            }
+        }
+
         ImGui::Render();
 
         int display_w, display_h;
@@ -171,7 +196,6 @@ int main() {
         glfwSwapBuffers(window);
     }
 
-    // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
