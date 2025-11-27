@@ -91,3 +91,10 @@ Contributions are welcome! If you'd like to improve the physics engine or add ne
 - GLAD for OpenGL function loading
 - ImGui for the user interface
 - Inspiration from various physics engine tutorials and resources
+
+## Pictures:
+<img width="1284" height="756" alt="Screenshot 2025-11-26 at 6 49 46 PM" src="https://github.com/user-attachments/assets/899012e0-ddcd-41de-aaf4-c362e5529ae2" />
+<img width="255" height="312" alt="Screenshot 2025-11-26 at 6 49 40 PM" src="https://github.com/user-attachments/assets/c110c7ab-6679-4867-8023-f5d7c3c7f63a" />
+
+
+
