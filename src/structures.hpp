@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <algorithm>
 
 struct Point {
     float x, y;
@@ -42,19 +43,71 @@ struct Square {
     }
 };
 
+struct Triangle {
+    Point point1, point2, point3;
+
+    void enforceConstraints() {
+        auto enforceDistance = [](Point& p1, Point& p2, float targetDistance) {
+            float dx = p2.x - p1.x;
+            float dy = p2.y - p1.y;
+            float dist = std::sqrt(dx * dx + dy * dy);
+            if (dist == 0.0f) return;
+            float diff = (dist - targetDistance) / dist;
+            if (!p1.fixed) { p1.x += dx * 0.5f * diff; p1.y += dy * 0.5f * diff; }
+            if (!p2.fixed) { p2.x -= dx * 0.5f * diff; p2.y -= dy * 0.5f * diff; }
+        };
+        float a = std::sqrt((point1.x - point2.x)*(point1.x - point2.x) + (point1.y - point2.y)*(point1.y - point2.y));
+        float b = std::sqrt((point2.x - point3.x)*(point2.x - point3.x) + (point2.y - point3.y)*(point2.y - point3.y));
+        float c = std::sqrt((point3.x - point1.x)*(point3.x - point1.x) + (point3.y - point1.y)*(point3.y - point1.y));
+        enforceDistance(point1, point2, a);
+        enforceDistance(point2, point3, b);
+        enforceDistance(point3, point1, c);
+    }
+};
+
 struct ParticleSystem {
     std::vector<Point> points;
     std::vector<Square> squares;
+    std::vector<Triangle> triangles;
+    bool gravityEnabled = true; 
 
     void add(const Point& p) { points.push_back(p); }
     void addSquare(const Square& s) { squares.push_back(s); }
+    void addTriangle(const Triangle& t) { triangles.push_back(t); }
 
-    void update(float dt) {
-        const float baseGravity = 980.0f;
+    void checkAndResolveCollision(Point& p, Point& edgeStart, Point& edgeEnd) {
+        float edgeDx = edgeEnd.x - edgeStart.x;
+        float edgeDy = edgeEnd.y - edgeStart.y;
+        float pointDx = p.x - edgeStart.x;
+        float pointDy = p.y - edgeStart.y;
+        float edgeLengthSquared = edgeDx * edgeDx + edgeDy * edgeDy;
+        if (edgeLengthSquared == 0) return;
+        float projection = (pointDx * edgeDx + pointDy * edgeDy) / edgeLengthSquared;
+        projection = std::max(0.0f, std::min(1.0f, projection));
+        float closestX = edgeStart.x + projection * edgeDx;
+        float closestY = edgeStart.y + projection * edgeDy;
+        float distX = p.x - closestX;
+        float distY = p.y - closestY;
+        float distanceSquared = distX * distX + distY * distY;
+        if (distanceSquared < p.radius * p.radius) {
+            float distance = std::sqrt(distanceSquared);
+            float overlap = p.radius - distance;
+            if (distance > 0) { p.x += (distX / distance) * overlap; p.y += (distY / distance) * overlap; }
+            else { p.x += overlap; p.y += overlap; }
+            float normalX = distance > 0 ? distX / distance : 1.0f;
+            float normalY = distance > 0 ? distY / distance : 0.0f;
+            float dotProduct = p.vx * normalX + p.vy * normalY;
+            p.vx -= 2 * dotProduct * normalX;
+            p.vy -= 2 * dotProduct * normalY;
+            p.vx *= p.restitution;
+            p.vy *= p.restitution;
+        }
+    }
+
+    void update(float dt, float gravityStrength) {
         for (auto& p : points) {
             if (p.fixed || p.dragged) continue;
-            float gravity = baseGravity * (1.0f + (p.radius - 1.0f) * 0.05f);
-            p.ay = gravity;
+            p.ay = gravityEnabled ? gravityStrength * (1.0f + (p.radius - 1.0f) * 0.05f) : 0.0f;
             p.vx += p.ax * dt;
             p.vy += p.ay * dt;
             p.vx *= p.damping;
@@ -70,33 +123,31 @@ struct ParticleSystem {
             }
         }
 
-        for (size_t i = 0; i < points.size(); ++i) {
-            for (size_t j = i + 1; j < points.size(); ++j) {
-                Point &p1 = points[i];
-                Point &p2 = points[j];
-                if (p1.fixed && p2.fixed) continue;
-                float dx = p2.x - p1.x;
-                float dy = p2.y - p1.y;
-                float distSq = dx*dx + dy*dy;
-                float minDist = p1.radius + p2.radius;
-                if (distSq < minDist*minDist) {
-                    float dist = std::sqrt(distSq);
-                    float overlap = 0.5f * (minDist - dist);
-                    if (!p1.fixed) { p1.x -= dx/dist * overlap; p1.y -= dy/dist * overlap; }
-                    if (!p2.fixed) { p2.x += dx/dist * overlap; p2.y += dy/dist * overlap; }
-                    float nx = dx / dist;
-                    float ny = dy / dist;
-                    float p = 2.0f * (p1.vx*nx + p1.vy*ny - p2.vx*nx - p2.vy*ny) / (p1.mass + p2.mass);
-                    if (!p1.fixed) { p1.vx -= p * p2.mass * nx; p1.vy -= p * p2.mass * ny; }
-                    if (!p2.fixed) { p2.vx += p * p1.mass * nx; p2.vy += p * p1.mass * ny; }
+        for (auto& t : triangles) {
+            for (auto* pt : {&t.point1, &t.point2, &t.point3}) {
+                if (pt->fixed || pt->dragged) continue;
+                pt->ay = gravityEnabled ? gravityStrength * (1.0f + (pt->radius - 1.0f) * 0.05f) : 0.0f;
+                pt->vx += pt->ax * dt;
+                pt->vy += pt->ay * dt;
+                pt->vx *= pt->damping;
+                pt->vy *= pt->damping;
+                pt->x += pt->vx * dt;
+                pt->y += pt->vy * dt;
+                if (pt->y + pt->radius > 720) {
+                    pt->y = 720 - pt->radius;
+                    pt->vy *= -pt->restitution;
+                    pt->vx *= (1 - pt->friction);
+                    if (std::abs(pt->vy) < 0.1f) pt->vy = 0;
+                    if (std::abs(pt->vx) < 0.01f) pt->vx = 0;
                 }
             }
+            t.enforceConstraints();
         }
 
         for (auto& s : squares) {
             for (auto* pt : {&s.point1, &s.point2, &s.point3, &s.point4}) {
                 if (pt->fixed || pt->dragged) continue;
-                pt->ay = baseGravity * (1.0f + (pt->radius - 1.0f) * 0.05f);
+                pt->ay = gravityEnabled ? gravityStrength * (1.0f + (pt->radius - 1.0f) * 0.05f) : 0.0f;
                 pt->vx += pt->ax * dt;
                 pt->vy += pt->ay * dt;
                 pt->vx *= pt->damping;
@@ -104,7 +155,6 @@ struct ParticleSystem {
                 pt->x += pt->vx * dt;
                 pt->y += pt->vy * dt;
             }
-
             float floorY = 720.0f;
             float minY = std::min({s.point1.y, s.point2.y, s.point3.y, s.point4.y});
             if (minY + s.point1.radius > floorY) {
@@ -118,43 +168,18 @@ struct ParticleSystem {
                     if (std::abs(pt->vx) < 0.01f) pt->vx = 0;
                 }
             }
-
             for (int i = 0; i < 10; ++i) s.enforceConstraints();
+        }
 
-            for (auto& p : points) {
-                if (p.fixed) continue;
-                auto checkAndResolveCollision = [&](Point& p1, Point& p2) {
-                    float edgeDx = p2.x - p1.x;
-                    float edgeDy = p2.y - p1.y;
-                    float pointDx = p.x - p1.x;
-                    float pointDy = p.y - p1.y;
-                    float edgeLengthSquared = edgeDx * edgeDx + edgeDy * edgeDy;
-                    float projection = (pointDx * edgeDx + pointDy * edgeDy) / edgeLengthSquared;
-                    projection = std::max(0.0f, std::min(1.0f, projection));
-                    float closestX = p1.x + projection * edgeDx;
-                    float closestY = p1.y + projection * edgeDy;
-                    float distX = p.x - closestX;
-                    float distY = p.y - closestY;
-                    float distanceSquared = distX * distX + distY * distY;
-                    if (distanceSquared < p.radius * p.radius) {
-                        float distance = std::sqrt(distanceSquared);
-                        float overlap = p.radius - distance;
-                        if (distance > 0) { p.x += (distX / distance) * overlap; p.y += (distY / distance) * overlap; }
-                        else { p.x += overlap; p.y += overlap; }
-                        float normalX = distX / distance;
-                        float normalY = distY / distance;
-                        float dotProduct = p.vx * normalX + p.vy * normalY;
-                        p.vx -= 2 * dotProduct * normalX;
-                        p.vy -= 2 * dotProduct * normalY;
-                        p.vx *= p.restitution;
-                        p.vy *= p.restitution;
+        for (auto& t : triangles) {
+            for (auto& s : squares) {
+                Point* triPoints[3] = {&t.point1, &t.point2, &t.point3};
+                Point* sqPoints[4] = {&s.point1, &s.point2, &s.point3, &s.point4};
+                for (auto* tp : triPoints) {
+                    for (int i = 0; i < 4; ++i) {
+                        checkAndResolveCollision(*tp, *sqPoints[i], *sqPoints[(i+1)%4]);
                     }
-                };
-
-                checkAndResolveCollision(s.point1, s.point2);
-                checkAndResolveCollision(s.point2, s.point3);
-                checkAndResolveCollision(s.point3, s.point4);
-                checkAndResolveCollision(s.point4, s.point1);
+                }
             }
         }
 
